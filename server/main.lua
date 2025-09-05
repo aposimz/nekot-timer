@@ -22,6 +22,19 @@ AddEventHandler('nekot-timer:server:resetParticipants', function()
         end
     end
     
+    -- 他ホストの参加者リストからこのプレイヤー(src)を除外し、UIを更新
+    for hostId, hostData in pairs(hosts) do
+        if hostId ~= src then
+            for i = #hostData.participants, 1, -1 do
+                if hostData.participants[i].id == src then
+                    table.remove(hostData.participants, i)
+                    TriggerClientEvent('nekot-timer:client:updateParticipants', hostId, hostData.participants)
+                    break
+                end
+            end
+        end
+    end
+    
     -- 新しいホストデータを初期化
     hosts[src] = {
         participants = {},

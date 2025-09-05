@@ -175,6 +175,8 @@ end)
 
 -- コマンド登録
 RegisterCommand('timer', function(source, args)
+    -- 参加者状態や進行中のUIをクリアしてからホスト化
+    resetAllTimers()
     isHost = true
     markerActive = true
     
