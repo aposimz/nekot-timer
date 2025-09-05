@@ -4,7 +4,13 @@ local isParticipant = false
 local hostageTimerActive = false
 local markerActive = false
 local joinMarkerActive = false
-local hostCoordsCache = nil
+
+-- 複数ホスト対応のための変数
+local nearbyHosts = {} -- 近くのホスト一覧 {id = ホストID, coords = 座標, radius = 半径}
+local currentHostId = nil -- 現在参加中または表示中のホストID
+local lastHostUpdateTime = 0 -- 最後にホスト一覧を更新した時間
+local lastQueryCoords = nil -- 前回クエリ時のプレイヤー座標
+
 local markerRadius = 10.0
 local markerHeight = 2.0
 local timerDuration = 180 -- タイマーデフォルト3分
@@ -20,9 +26,16 @@ local function resetAllTimers()
     isParticipant = false
     timerStartTime = 0
     countdownStartTime = 0
+    currentHostId = nil
     SendNUIMessage({ type = "hideCountdown" })
     SendNUIMessage({ type = "hideTimer" })
 end
+
+-- 初回起動時に近くのホスト一覧を取得
+Citizen.CreateThread(function()
+    Citizen.Wait(2000) -- サーバー接続完了を待つ
+    UpdateNearbyHosts()
+end)
 
 -- サウンド
 local sounds = {
@@ -40,40 +53,82 @@ RegisterNUICallback('closeMenu', function(data, cb)
     SetNuiFocusKeepInput(false)
     -- UIを閉じたら範囲表示を停止
     markerActive = false
-    if isHost then
-        -- サーバに受付終了を通知
+    local wasHost = isHost
+    if wasHost then
+        -- サーバに受付終了を通知（他ホストのマーカー維持のため必須）
         TriggerServerEvent('nekot-timer:server:closeHostMenu')
     end
+    -- 最後にホストフラグを下ろす（観戦者に戻る）
+    isHost = false
     cb('ok')
 end)
 
 -- 参加受付の可視状態切替
 RegisterNetEvent('nekot-timer:client:enableJoinMarker')
-AddEventHandler('nekot-timer:client:enableJoinMarker', function(hostCoordsFromServer, radiusFromServer)
+AddEventHandler('nekot-timer:client:enableJoinMarker', function(hostCoordsFromServer, radiusFromServer, hostId)
     if not isHost then
         joinMarkerActive = true
         isParticipant = false
-        if type(radiusFromServer) == 'number' then
-            markerRadius = radiusFromServer
+        
+        -- ホスト情報を追加/更新
+        local found = false
+        for i, host in ipairs(nearbyHosts) do
+            if host.id == hostId then
+                host.coords = hostCoordsFromServer
+                host.radius = radiusFromServer or host.radius
+                found = true
+                break
+            end
         end
-        if hostCoordsFromServer ~= nil then
-            -- 受信直後の即時描画のため一度キャッシュ
-            hostCoordsCache = hostCoordsFromServer
+        
+        -- 新しいホストの場合は追加
+        if not found then
+            table.insert(nearbyHosts, {
+                id = hostId,
+                coords = hostCoordsFromServer,
+                radius = radiusFromServer or 10.0
+            })
         end
     end
 end)
 
 RegisterNetEvent('nekot-timer:client:disableJoinMarker')
-AddEventHandler('nekot-timer:client:disableJoinMarker', function()
-    joinMarkerActive = false
-    isParticipant = false
+AddEventHandler('nekot-timer:client:disableJoinMarker', function(hostId)
+    -- 特定のホストのマーカーを無効化
+    for i, host in ipairs(nearbyHosts) do
+        if host.id == hostId then
+            table.remove(nearbyHosts, i)
+            break
+        end
+    end
+    
+    -- 全てのホストが無くなったら参加状態をリセット
+    if #nearbyHosts == 0 then
+        joinMarkerActive = false
+        isParticipant = false
+        currentHostId = nil
+    end
 end)
 
 -- サーバからのホスト座標更新（参加受付中の円表示で使用）
 RegisterNetEvent('nekot-timer:client:updateHostCoords')
-AddEventHandler('nekot-timer:client:updateHostCoords', function(coords)
-    hostCoordsCache = coords
+AddEventHandler('nekot-timer:client:updateHostCoords', function(coords, hostId)
+    -- 特定のホストの座標を更新
+    for i, host in ipairs(nearbyHosts) do
+        if host.id == hostId then
+            host.coords = coords
+            break
+        end
+    end
 end)
+
+-- 近くのホスト一覧を更新（定期的に呼び出す）
+function UpdateNearbyHosts()
+    QBCore.Functions.TriggerCallback('nekot-timer:server:getNearbyHosts', function(hosts)
+        nearbyHosts = hosts
+        joinMarkerActive = #hosts > 0
+    end)
+end
 
 -- サーバからマーカー半径の反映
 RegisterNetEvent('nekot-timer:client:setMarkerRadius')
@@ -230,29 +285,60 @@ Citizen.CreateThread(function()
                     0, 200, 255, 120, false, true, 2, false, nil, nil, false)
             end
             
-            -- 非ホスト: 参加受付中はホストの円を表示（50m以内）
-            if not isHost and joinMarkerActive then
-                if hostCoordsCache then
-                    local distance = Vdist(coords.x, coords.y, coords.z, hostCoordsCache.x, hostCoordsCache.y, hostCoordsCache.z)
-                    
-                    if distance <= 50.0 then
-                        -- マーカーを描画
-                        DrawMarker(1, hostCoordsCache.x, hostCoordsCache.y, hostCoordsCache.z - 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
-                            markerRadius * 2.0, markerRadius * 2.0, markerHeight, 
-                            0, 200, 255, 120, false, true, 2, false, nil, nil, false)
-                        
-                        -- マーカー内にいるかチェック
-                        if distance <= markerRadius and not isParticipant then
-                            -- [E]で参加 表示
-                            DrawText3D(coords.x, coords.y, coords.z + 1.0, "[E]でタイマーに参加")
-                            
-                            -- Eキー押下で参加
-                            if IsControlJustReleased(0, 38) then -- E key
-                                TriggerServerEvent('nekot-timer:server:joinEvent')
-                                isParticipant = true
-                                PlaySoundFrontend(-1, "CONFIRM_BEEP", "HUD_FRONTEND_DEFAULT_SOUNDSET", 1)
+            -- 非ホスト: 最寄りホスト検出と参加処理（位置変化/経過時間で近くのホスト一覧を更新）
+            if not isHost then
+                -- 2秒経過 or 5m以上移動で再取得
+                local needQuery = false
+                local now = GetGameTimer()
+                if (not lastHostUpdateTime) or (now - lastHostUpdateTime) > 2000 then
+                    needQuery = true
+                end
+                if lastQueryCoords == nil then
+                    needQuery = true
+                else
+                    local moved = Vdist(coords.x, coords.y, coords.z, lastQueryCoords.x, lastQueryCoords.y, lastQueryCoords.z)
+                    if moved > 5.0 then
+                        needQuery = true
+                    end
+                end
+
+                if needQuery then
+                    UpdateNearbyHosts()
+                    lastHostUpdateTime = now
+                    lastQueryCoords = { x = coords.x, y = coords.y, z = coords.z }
+                end
+
+                local nearestHost = nil
+                local nearestDist = 1e9
+
+                -- 全ての近くのホストについて処理（描画と最寄り判定）
+                for _, host in ipairs(nearbyHosts) do
+                    if host.coords then
+                        local distance = Vdist(coords.x, coords.y, coords.z, host.coords.x, host.coords.y, host.coords.z)
+
+                        if distance <= 50.0 then
+                            -- マーカーを描画
+                            DrawMarker(1, host.coords.x, host.coords.y, host.coords.z - 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
+                                host.radius * 2.0, host.radius * 2.0, markerHeight, 
+                                0, 200, 255, 120, false, true, 2, false, nil, nil, false)
+
+                            -- 参加可能半径内なら最寄り候補に
+                            if distance <= host.radius and distance < nearestDist then
+                                nearestDist = distance
+                                nearestHost = host
                             end
                         end
+                    end
+                end
+
+                -- 最寄りホストに対してのみ[E]で参加を表示・処理
+                if nearestHost and not isParticipant and joinMarkerActive then
+                    DrawText3D(coords.x, coords.y, coords.z + 1.0, "[E]でタイマーに参加")
+                    if IsControlJustReleased(0, 38) then -- E key
+                        TriggerServerEvent('nekot-timer:server:joinEvent', nearestHost.id)
+                        isParticipant = true
+                        currentHostId = nearestHost.id
+                        PlaySoundFrontend(-1, "CONFIRM_BEEP", "HUD_FRONTEND_DEFAULT_SOUNDSET", 1)
                     end
                 end
             end
