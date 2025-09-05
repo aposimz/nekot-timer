@@ -1,0 +1,166 @@
+/* 全体のスタイル */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Arial', sans-serif;
+}
+
+body {
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* ホスト設定メニュー */
+.container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 500px;
+    background-color: rgba(0, 0, 0, 0.8);
+    border-radius: 5px;
+    color: white;
+    display: none;
+}
+
+.header {
+    background-color: rgba(0, 100, 255, 0.8);
+    padding: 15px;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    text-align: center;
+}
+
+.content {
+    padding: 20px;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+input[type="number"],
+input[type="text"] {
+    width: 100%;
+    padding: 8px;
+    border: none;
+    border-radius: 3px;
+    background-color: rgba(255, 255, 255, 0.9);
+}
+
+.participants-container {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.participants-container h3 {
+    margin-bottom: 10px;
+}
+
+#participants-list {
+    background-color: rgba(255, 255, 255, 0.1);
+    padding: 10px;
+    border-radius: 3px;
+    min-height: 50px;
+}
+
+.participant-item {
+    padding: 5px;
+    margin-bottom: 3px;
+    background-color: rgba(0, 100, 255, 0.3);
+    border-radius: 3px;
+}
+
+.buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 20px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 3px;
+    background-color: rgba(0, 100, 255, 0.8);
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn:hover {
+    background-color: rgba(0, 100, 255, 1);
+}
+
+/* カウントダウン表示 */
+.countdown-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: none;
+}
+
+.countdown-text {
+    font-size: 120px;
+    font-weight: bold;
+    color: white;
+    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    min-height: 140px; /* テキストが消えないように最小の高さを設定 */
+    min-width: 100px; /* テキストが消えないように最小の幅を設定 */
+}
+
+/* タイマー表示 */
+.timer-container {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 10px 20px;
+    border-radius: 5px;
+    display: none;
+}
+
+.timer-text {
+    font-size: 36px;
+    font-weight: bold;
+    color: white;
+}
+
+/* 右側の参加者パネル */
+#participants-panel {
+    position: absolute;
+    top: 50%;
+    left: calc(50% + 270px);
+    transform: translateY(-50%);
+    width: 260px;
+    background-color: rgba(0, 0, 0, 0.8);
+    border-radius: 5px;
+    color: white;
+    display: none; /* 初期は非表示。openHostMenu時に表示 */
+}
+
+.participants-header {
+    background-color: rgba(0, 100, 255, 0.8);
+    padding: 12px 15px;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    font-weight: bold;
+}
+
+.participants-body {
+    max-height: 360px;
+    overflow-y: auto;
+    padding: 12px 15px;
+}

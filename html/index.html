@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>チェイスタイマー</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <!-- ホスト設定メニュー -->
+    <div id="host-menu" class="container">
+        <div class="header">
+            <h2>チェイスタイマー設定</h2>
+        </div>
+        <div class="content">
+            <div class="form-group">
+                <label for="marker-radius">参加範囲サイズ (m)</label>
+                <input type="number" id="marker-radius" min="1" max="50" placeholder="10">
+            </div>
+            <div class="form-group">
+                <label for="timer-duration">タイマー時間 (秒)</label>
+                <input type="number" id="timer-duration" min="1" max="600" placeholder="180">
+            </div>
+            <div class="form-group">
+                <label for="countdown-duration">カウントダウン秒数</label>
+                <input type="number" id="countdown-duration" min="1" max="15" placeholder="5">
+            </div>
+            <div class="form-group">
+                <label for="countdown-text">開始メッセージ</label>
+                <input type="text" id="countdown-text" placeholder="START!">
+            </div>
+            <div class="form-group">
+                <label for="end-text">タイマー終了時のメッセージ</label>
+                <input type="text" id="end-text" placeholder="Time's Up!">
+            </div>
+            
+            <div class="buttons">
+                <button id="start-button" class="btn">開始</button>
+                <button id="close-button" class="btn">閉じる</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 参加者パネル（中央UIの右側に表示） -->
+    <div id="participants-panel">
+        <div class="participants-header">参加者リスト</div>
+        <div id="participants-list" class="participants-body">
+            <!-- 参加者リストがここに動的に追加される -->
+        </div>
+    </div>
+    
+    <!-- カウントダウン表示 -->
+    <div id="countdown" class="countdown-container">
+        <div id="countdown-text-display" class="countdown-text"></div>
+    </div>
+    
+    <!-- タイマー表示 -->
+    <div id="timer" class="timer-container">
+        <div id="timer-text" class="timer-text">03:00</div>
+    </div>
+    
+    <script src="script.js"></script>
+</body>
+</html>
