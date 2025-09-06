@@ -7,7 +7,7 @@ local joinMarkerActive = false
 
 -- 複数ホスト対応のための変数
 local nearbyHosts = {} -- 近くのホスト一覧 {id = ホストID, coords = 座標, radius = 半径}
-local currentHostId = nil -- 現在参加中または表示中のホストID
+local currentHostId = nil -- 現在参加中または表示中のホストID 未参照
 local lastHostUpdateTime = 0 -- 最後にホスト一覧を更新した時間
 local lastQueryCoords = nil -- 前回クエリ時のプレイヤー座標
 
@@ -37,15 +37,15 @@ Citizen.CreateThread(function()
     UpdateNearbyHosts()
 end)
 
--- サウンド
-local sounds = {
-    join = "CONFIRM_BEEP",
-    countdownTick = "HUD_FRONTEND_DEFAULT_SOUNDSET",
-    countdownStart = "RACE_PLACED",
-    warning = "TIMER_STOP",
-    finalCountdown = "SELECT",
-    timerEnd = "TIMER_STOP"
-}
+-- 使用サウンド（実コードでは直接PlaySoundFrontendを使用）
+-- local sounds = {
+--     join = { name = "CONFIRM_BEEP", set = "HUD_FRONTEND_DEFAULT_SOUNDSET" }, -- 参加時
+--     countdownTick = { name = "Beep_Red", set = "DLC_HEIST_HACKING_SNAKE_SOUNDS" }, -- カウントダウン
+--     countdownStart = { name = "RACE_PLACED", set = "HUD_AWARDS" }, -- タイマー開始
+--     warning = { name = "10_SEC_WARNING", set = "HUD_MINI_GAME_SOUNDSET" }, -- 残り15秒警告
+--     finalCountdown = { name = "Beep_Red", set = "DLC_HEIST_HACKING_SNAKE_SOUNDS" }, -- 残り5〜1秒
+--     timerEnd = { name = "TIMER_STOP", set = "HUD_MINI_GAME_SOUNDSET" } -- 終了
+-- }
 
 -- NUIコールバック
 RegisterNUICallback('closeMenu', function(data, cb)
@@ -58,7 +58,7 @@ RegisterNUICallback('closeMenu', function(data, cb)
         -- サーバに受付終了を通知（他ホストのマーカー維持のため必須）
         TriggerServerEvent('nekot-timer:server:closeHostMenu')
     end
-    -- 最後にホストフラグを下ろす（観戦者に戻る）
+    -- 最後にホストフラグを下ろす
     isHost = false
     cb('ok')
 end)
@@ -443,9 +443,11 @@ end)
 
 -- 3Dテキスト描画用関数
 function DrawText3D(x, y, z, text)
-    local onScreen, _x, _y = World3dToScreen2d(x, y, z)
-    local px, py, pz = table.unpack(GetGameplayCamCoords())
-    
+    local onScreen, screenX, screenY = World3dToScreen2d(x, y, z)
+    if not onScreen then
+        return
+    end
+
     SetTextScale(0.35, 0.35)
     SetTextFont(0)
     SetTextProportional(1)
@@ -453,7 +455,8 @@ function DrawText3D(x, y, z, text)
     SetTextEntry("STRING")
     SetTextCentre(1)
     AddTextComponentString(text)
-    DrawText(_x, _y)
+    DrawText(screenX, screenY)
+
     local factor = (string.len(text)) / 370
-    DrawRect(_x, _y + 0.0125, 0.015 + factor, 0.03, 41, 11, 41, 68)
+    DrawRect(screenX, screenY + 0.0125, 0.015 + factor, 0.03, 41, 11, 41, 68)
 end
