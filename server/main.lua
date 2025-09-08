@@ -2,6 +2,7 @@ local QBCore = exports['qb-core']:GetCoreObject()
 
 -- 複数のホストをサポートするためのテーブル
 local hosts = {}
+
 -- hosts[hostId] = {
 --     participants = {}, -- 参加者リスト
 --     coords = vector3(0,0,0), -- ホスト座標
@@ -159,9 +160,16 @@ AddEventHandler('nekot-timer:server:startCountdown', function(data)
     -- 参加受付を終了
     hosts[src].joinOpen = false
     
-    -- このホストの参加者全員にカウントダウン開始を通知
+    -- このホストの参加者全員にカウントダウン開始を通知（hostIdを付与）
+    local payload = {
+        timerDuration = tonumber(data.timerDuration) or 180,
+        countdownDuration = tonumber(data.countdownDuration) or 3,
+        countdownText = (type(data.countdownText) == 'string' and data.countdownText ~= '') and data.countdownText or 'START!',
+        endText = (type(data.endText) == 'string' and data.endText ~= '') and data.endText or "Time's Up!",
+        hostId = src
+    }
     for _, participant in ipairs(hosts[src].participants) do
-        TriggerClientEvent('nekot-timer:client:startCountdown', participant.id, data)
+        TriggerClientEvent('nekot-timer:client:startCountdown', participant.id, payload)
     end
     
     -- カウントダウン終了後にタイマー開始
@@ -169,7 +177,7 @@ AddEventHandler('nekot-timer:server:startCountdown', function(data)
         -- ホストが存在する場合のみ処理（途中で切断された場合の対策）
         if hosts[src] then
             for _, participant in ipairs(hosts[src].participants) do
-                TriggerClientEvent('nekot-timer:client:startTimer', participant.id)
+                TriggerClientEvent('nekot-timer:client:startTimer', participant.id, src)
             end
         end
     end)
@@ -195,7 +203,7 @@ AddEventHandler('nekot-timer:server:timerEnded', function()
     
     -- このホストの参加者全員にタイマー終了を通知
     for _, participant in ipairs(hosts[src].participants) do
-        TriggerClientEvent('nekot-timer:client:timerEnded', participant.id)
+        TriggerClientEvent('nekot-timer:client:timerEnded', participant.id, src)
     end
     
     -- タイマー終了後、ホストデータをクリーンアップ
