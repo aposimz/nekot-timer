@@ -15,8 +15,28 @@ local markerRadius = 10.0
 local markerHeight = 2.0
 local timerDuration = 180 -- タイマーデフォルト3分
 local countdownDuration = 5 -- カウントダウンデフォルト5秒
-local countdownText = "START!"
-local endText = "Time's Up!"
+local DEFAULT_COUNTDOWN_TEXT = "START!"
+local DEFAULT_END_TEXT = "Time's Up!"
+local countdownText = DEFAULT_COUNTDOWN_TEXT
+local endText = DEFAULT_END_TEXT
+
+-- ホスト設定の保存（セッション中のみ）
+local sessionHostConfig = nil
+
+local function loadLastHostConfig()
+    return sessionHostConfig
+end
+
+local function saveLastHostConfig(cfg)
+    if type(cfg) ~= 'table' then return end
+    sessionHostConfig = {
+        markerRadius = tonumber(cfg.markerRadius) or markerRadius,
+        timerDuration = tonumber(cfg.timerDuration) or timerDuration,
+        countdownDuration = tonumber(cfg.countdownDuration) or countdownDuration,
+        countdownText = (type(cfg.countdownText) == 'string' and cfg.countdownText ~= '') and cfg.countdownText or DEFAULT_COUNTDOWN_TEXT,
+        endText = (type(cfg.endText) == 'string' and cfg.endText ~= '') and cfg.endText or DEFAULT_END_TEXT
+    }
+end
 local timerStartTime = 0
 local countdownStartTime = 0
 local isCountdownActive = false
@@ -132,22 +152,26 @@ end
 
 -- サーバからマーカー半径の反映
 RegisterNetEvent('nekot-timer:client:setMarkerRadius')
-AddEventHandler('nekot-timer:client:setMarkerRadius', function(serverRadius)
-    if type(serverRadius) == 'number' then
-        markerRadius = serverRadius
+AddEventHandler('nekot-timer:client:setMarkerRadius', function(serverRadius, hostId)
+    if type(serverRadius) ~= 'number' or not hostId then
+        return
     end
+    -- 非ホスト側: 該当ホストのみの半径を更新
+    for i, host in ipairs(nearbyHosts) do
+        if host.id == hostId then
+            host.radius = serverRadius
+            break
+        end
+    end
+    -- 自分がホストの場合のローカル半径は NUI 側で既に反映済み
 end)
 RegisterNUICallback('startTimer', function(data, cb)
     markerRadius = tonumber(data.markerRadius) or 10.0
     timerDuration = tonumber(data.timerDuration) or 180
     countdownDuration = tonumber(data.countdownDuration) or countdownDuration
-    -- UIから有効値が来た時のみ上書きし、空なら既定値を維持
-    if data.countdownText ~= nil and data.countdownText ~= '' then
-        countdownText = data.countdownText
-    end
-    if data.endText ~= nil and data.endText ~= '' then
-        endText = data.endText
-    end
+    -- テキストは空や未定義ならデフォルトにフォールバック
+    local sendCountdownText = (type(data.countdownText) == 'string' and data.countdownText ~= '') and data.countdownText or DEFAULT_COUNTDOWN_TEXT
+    local sendEndText = (type(data.endText) == 'string' and data.endText ~= '') and data.endText or DEFAULT_END_TEXT
     
     -- print("Countdown seconds: " .. countdownDuration)
     -- print("Type: " .. type(countdownDuration))
@@ -156,12 +180,21 @@ RegisterNUICallback('startTimer', function(data, cb)
     TriggerServerEvent('nekot-timer:server:startCountdown', {
         timerDuration = timerDuration,
         countdownDuration = countdownDuration,
-        countdownText = countdownText,
-        endText = endText
+        countdownText = sendCountdownText,
+        endText = sendEndText
     })
     
     SetNuiFocus(false, false)
     cb('ok')
+
+    -- 自分のホスト設定を保存
+    saveLastHostConfig({
+        markerRadius = markerRadius,
+        timerDuration = timerDuration,
+        countdownDuration = countdownDuration,
+        countdownText = sendCountdownText,
+        endText = sendEndText
+    })
 end)
 
 -- 参加範囲半径の即時更新
@@ -179,6 +212,18 @@ RegisterCommand('timer', function(source, args)
     resetAllTimers()
     isHost = true
     markerActive = true
+    -- 前回の自分のホスト設定を読み込み（なければ現在値/デフォルト）
+    local last = loadLastHostConfig()
+    if last then
+        markerRadius = last.markerRadius or markerRadius
+        timerDuration = last.timerDuration or timerDuration
+        countdownDuration = last.countdownDuration or countdownDuration
+        countdownText = last.countdownText or DEFAULT_COUNTDOWN_TEXT
+        endText = last.endText or DEFAULT_END_TEXT
+    else
+        countdownText = DEFAULT_COUNTDOWN_TEXT
+        endText = DEFAULT_END_TEXT
+    end
     
     -- サーバーに参加者リストリセットを通知
     TriggerServerEvent('nekot-timer:server:resetParticipants')
@@ -213,10 +258,23 @@ AddEventHandler('nekot-timer:client:startCountdown', function(data)
     markerActive = false
     isCountdownActive = true
     countdownStartTime = GetGameTimer()
-    timerDuration = data.timerDuration
-    countdownDuration = data.countdownDuration
-    countdownText = data.countdownText
-    endText = data.endText or endText
+    timerDuration = tonumber(data.timerDuration) or timerDuration
+    countdownDuration = tonumber(data.countdownDuration) or countdownDuration
+    -- 未入力や空文字のときはデフォルトにフォールバック
+    if type(data.countdownText) == 'string' and data.countdownText ~= '' then
+        countdownText = data.countdownText
+    else
+        countdownText = DEFAULT_COUNTDOWN_TEXT
+    end
+    if type(data.endText) == 'string' and data.endText ~= '' then
+        endText = data.endText
+    else
+        endText = DEFAULT_END_TEXT
+    end
+    -- hostIdがあり、かつ参加先と異なる場合は無視
+    if data.hostId and currentHostId and data.hostId ~= currentHostId then
+        return
+    end
     
     -- print("Countdown start received: " .. countdownDuration .. "s")
     
@@ -243,7 +301,10 @@ AddEventHandler('nekot-timer:client:forceStop', function()
 end)
 
 RegisterNetEvent('nekot-timer:client:startTimer')
-AddEventHandler('nekot-timer:client:startTimer', function()
+AddEventHandler('nekot-timer:client:startTimer', function(hostId)
+    if hostId and currentHostId and hostId ~= currentHostId then
+        return
+    end
     if hostageTimerActive then
         return
     end
