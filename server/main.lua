@@ -97,6 +97,15 @@ AddEventHandler('nekot-timer:server:joinEvent', function(hostId)
         
         -- 参加者リスト更新をホストに通知
         TriggerClientEvent('nekot-timer:client:updateParticipants', hostId, hosts[hostId].participants)
+
+        -- ホスト名を取得して参加成功を本人へ通知
+        local hostPlayer = QBCore.Functions.GetPlayer(hostId)
+        local hostName = nil
+        if hostPlayer and hostPlayer.PlayerData and hostPlayer.PlayerData.charinfo then
+            hostName = (hostPlayer.PlayerData.charinfo.firstname or "") .. ' ' .. (hostPlayer.PlayerData.charinfo.lastname or "")
+        end
+        TriggerClientEvent('nekot-timer:client:joined', src, hostId, hostName)
+        -- print(string.format('[nekot-timer] server: joined sent -> player=%d host=%d name=%s', src, hostId, hostName or 'nil'))
     end
 end)
 
