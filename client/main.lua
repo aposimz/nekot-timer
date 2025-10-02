@@ -7,7 +7,7 @@ local joinMarkerActive = false
 
 -- 複数ホスト対応のための変数
 local nearbyHosts = {} -- 近くのホスト一覧 {id = ホストID, coords = 座標, radius = 半径}
-local currentHostId = nil -- 現在参加中または表示中のホストID 未参照
+local currentHostId = nil -- 現在参加中のホストID。参加先一致チェックやクリーンアップに使用
 local lastHostUpdateTime = 0 -- 最後にホスト一覧を更新した時間
 local lastQueryCoords = nil -- 前回クエリ時のプレイヤー座標
 
@@ -56,16 +56,6 @@ Citizen.CreateThread(function()
     Citizen.Wait(2000) -- サーバー接続完了を待つ
     UpdateNearbyHosts()
 end)
-
--- 使用サウンド（実コードでは直接PlaySoundFrontendを使用）
--- local sounds = {
---     join = { name = "CONFIRM_BEEP", set = "HUD_FRONTEND_DEFAULT_SOUNDSET" }, -- 参加時
---     countdownTick = { name = "Beep_Red", set = "DLC_HEIST_HACKING_SNAKE_SOUNDS" }, -- カウントダウン
---     countdownStart = { name = "RACE_PLACED", set = "HUD_AWARDS" }, -- タイマー開始
---     warning = { name = "10_SEC_WARNING", set = "HUD_MINI_GAME_SOUNDSET" }, -- 残り15秒警告
---     finalCountdown = { name = "Beep_Red", set = "DLC_HEIST_HACKING_SNAKE_SOUNDS" }, -- 残り5〜1秒
---     timerEnd = { name = "TIMER_STOP", set = "HUD_MINI_GAME_SOUNDSET" } -- 終了
--- }
 
 -- NUIコールバック
 RegisterNUICallback('closeMenu', function(data, cb)
@@ -122,6 +112,12 @@ AddEventHandler('nekot-timer:client:disableJoinMarker', function(hostId)
         end
     end
     
+    -- 自分がそのホストに参加中だったら離脱扱いにして再参加を許可
+    if currentHostId and hostId == currentHostId then
+        isParticipant = false
+        currentHostId = nil
+    end
+
     -- 全てのホストが無くなったら参加状態をリセット
     if #nearbyHosts == 0 then
         joinMarkerActive = false
@@ -253,6 +249,14 @@ AddEventHandler('nekot-timer:client:updateParticipants', function(participants)
     end
 end)
 
+RegisterNetEvent('nekot-timer:client:joined')
+AddEventHandler('nekot-timer:client:joined', function(hostId, hostName)
+	local name = hostName or ('ID ' .. tostring(hostId))
+	-- print(string.format('[nekot-timer] client: joined received host=%s name=%s', tostring(hostId), name))
+	PlaySoundFrontend(-1, "Deliver_Pick_Up", "HUD_FRONTEND_MP_COLLECTABLE_SOUNDS", true)
+	QBCore.Functions.Notify(('%s のタイマーに参加しました'):format(name), "success", 3000)
+end)
+
 RegisterNetEvent('nekot-timer:client:startCountdown')
 AddEventHandler('nekot-timer:client:startCountdown', function(data)
     markerActive = false
@@ -328,7 +332,7 @@ AddEventHandler('nekot-timer:client:startTimer', function(hostId)
     end)
     
     -- タイマー開始音
-    PlaySoundFrontend(-1, "RACE_PLACED", "HUD_AWARDS", 1)
+    PlaySoundFrontend(-1, "RACE_PLACED", "HUD_AWARDS", true)
 end)
 
 -- マーカー描画
@@ -341,7 +345,7 @@ Citizen.CreateThread(function()
             local playerPed = PlayerPedId()
             local coords = GetEntityCoords(playerPed)
             
-            -- マーカーを描画（自分がホストの場合）
+            -- マーカーを描画（自分がホストの場合）DrawMarker の末尾引数は nil, nilのままで。空文字だとエラー
             if isHost then
                 DrawMarker(1, coords.x, coords.y, coords.z - 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 
                     markerRadius * 2.0, markerRadius * 2.0, markerHeight, 
@@ -395,13 +399,12 @@ Citizen.CreateThread(function()
                 end
 
                 -- 最寄りホストに対してのみ[E]で参加を表示・処理
-                if nearestHost and not isParticipant and joinMarkerActive then
+                if nearestHost and (not isParticipant or (currentHostId ~= nearestHost.id)) and joinMarkerActive then
                     DrawText3D(coords.x, coords.y, coords.z + 1.0, "[E]でタイマーに参加")
                     if IsControlJustReleased(0, 38) then -- E key
                         TriggerServerEvent('nekot-timer:server:joinEvent', nearestHost.id)
                         isParticipant = true
                         currentHostId = nearestHost.id
-                        PlaySoundFrontend(-1, "CONFIRM_BEEP", "HUD_FRONTEND_DEFAULT_SOUNDSET", 1)
                     end
                 end
             end
@@ -442,7 +445,7 @@ Citizen.CreateThread(function()
             -- 秒数が変わった時に音を鳴らす（0秒は数値更新を送らない）
             if currentSecond ~= lastSecond and currentSecond > 0 then
                 lastSecond = currentSecond
-                PlaySoundFrontend(-1, "Beep_Red", "DLC_HEIST_HACKING_SNAKE_SOUNDS", 1)
+                PlaySoundFrontend(-1, "Beep_Red", "DLC_HEIST_HACKING_SNAKE_SOUNDS", true)
                 
                 -- NUIにカウントダウン更新を送信
                 SendNUIMessage({
@@ -471,13 +474,13 @@ Citizen.CreateThread(function()
                 -- 残り時間に応じた音通知
                 if remainingTime == 15 then
                     -- 残り15秒: 警告音
-                    PlaySoundFrontend(-1, "10_SEC_WARNING", "HUD_MINI_GAME_SOUNDSET", 1)
+                    PlaySoundFrontend(-1, "10_SEC_WARNING", "HUD_MINI_GAME_SOUNDSET", true)
                 elseif remainingTime <= 5 and remainingTime > 0 then
                     -- 残り5秒〜1秒: 1秒ごとにピッ音
-                    PlaySoundFrontend(-1, "Beep_Red", "DLC_HEIST_HACKING_SNAKE_SOUNDS", 1)
+                    PlaySoundFrontend(-1, "Beep_Red", "DLC_HEIST_HACKING_SNAKE_SOUNDS", true)
                 elseif remainingTime <= 0 then
                     -- 0秒: 終了音
-                    PlaySoundFrontend(-1, "TIMER_STOP", "HUD_MINI_GAME_SOUNDSET", 1)
+                    PlaySoundFrontend(-1, "TIMER_STOP", "HUD_MINI_GAME_SOUNDSET", true)
                     hostageTimerActive = false
 
                     -- タイマー終了時に終了テキストを中央に1秒表示
@@ -511,10 +514,10 @@ function DrawText3D(x, y, z, text)
 
     SetTextScale(0.35, 0.35)
     SetTextFont(0)
-    SetTextProportional(1)
+    SetTextProportional(true)
     SetTextColour(255, 255, 255, 215)
     SetTextEntry("STRING")
-    SetTextCentre(1)
+    SetTextCentre(true)
     AddTextComponentString(text)
     DrawText(screenX, screenY)
 
