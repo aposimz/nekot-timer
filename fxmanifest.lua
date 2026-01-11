@@ -3,7 +3,7 @@ game 'gta5'
 
 author 'nekot'
 description 'チェイス用タイマー'
-version '0.0.4'
+version '0.0.5'
 
 ui_page 'html/index.html'
 
