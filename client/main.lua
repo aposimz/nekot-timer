@@ -202,8 +202,8 @@ RegisterNUICallback('updateRadius', function(data, cb)
     cb('ok')
 end)
 
--- コマンド登録
-RegisterCommand('timer', function(source, args)
+-- タイマーホストメニューを開く関数
+local function openTimerHostMenu()
     -- 参加者状態や進行中のUIをクリアしてからホスト化
     resetAllTimers()
     isHost = true
@@ -235,7 +235,18 @@ RegisterCommand('timer', function(source, args)
         countdownText = countdownText,
         endText = endText
     })
+end
+
+-- コマンド登録
+RegisterCommand('timer', function(source, args)
+    openTimerHostMenu()
 end, false)
+
+-- ラジアルメニュー用のイベント
+RegisterNetEvent('nekot-timer:openHostMenu')
+AddEventHandler('nekot-timer:openHostMenu', function()
+    openTimerHostMenu()
+end)
 
 -- サーバーからのイベント
 RegisterNetEvent('nekot-timer:client:updateParticipants')
